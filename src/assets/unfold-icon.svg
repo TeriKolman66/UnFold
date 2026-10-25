@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="background" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(86 78) rotate(45) scale(245)">
+      <stop stop-color="#161719"/>
+      <stop offset="1" stop-color="#050506"/>
+    </radialGradient>
+    <radialGradient id="red" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(56 117) rotate(48) scale(65)">
+      <stop stop-color="#f2aaa0"/>
+      <stop offset="0.25" stop-color="#d96565"/>
+      <stop offset="0.68" stop-color="#b63e48"/>
+      <stop offset="1" stop-color="#852a37"/>
+    </radialGradient>
+    <radialGradient id="white" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(169 60) rotate(50) scale(48)">
+      <stop stop-color="#ffffff"/>
+      <stop offset="0.44" stop-color="#f3f3f4"/>
+      <stop offset="0.78" stop-color="#cbccd0"/>
+      <stop offset="1" stop-color="#9b9ca2"/>
+    </radialGradient>
+    <radialGradient id="white-small" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(172 178) rotate(50) scale(36)">
+      <stop stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#f0f0f1"/>
+      <stop offset="1" stop-color="#bfc0c5"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="13"/>
+    </filter>
+    <clipPath id="icon-clip"><rect x="5" y="5" width="246" height="246" rx="55"/></clipPath>
+  </defs>
+  <rect x="5" y="5" width="246" height="246" rx="55" fill="url(#background)"/>
+  <rect x="6" y="6" width="244" height="244" rx="54" fill="none" stroke="#313136" stroke-width="2"/>
+  <g clip-path="url(#icon-clip)">
+  <path d="M99 126 C129 121 139 82 157 76 M99 140 C128 145 140 179 159 183" fill="none" stroke="#101114" stroke-width="13" stroke-linecap="round"/>
+  <path d="M99 126 C129 121 139 82 157 76 M99 140 C128 145 140 179 159 183" fill="none" stroke="#999ba0" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="69" cy="133" r="48" fill="#c44854" opacity="0.54" filter="url(#glow)"/>
+  <circle cx="177" cy="72" r="25" fill="url(#white)" stroke="#202024" stroke-width="3"/>
+  <circle cx="178" cy="185" r="19" fill="url(#white-small)" stroke="#202024" stroke-width="3"/>
+  <circle cx="69" cy="133" r="33" fill="url(#red)" stroke="#db7776" stroke-width="2"/>
+  <ellipse cx="59" cy="117" rx="12" ry="5" fill="#ffdad2" opacity="0.28" transform="rotate(-28 59 117)"/>
+  </g>
+</svg>

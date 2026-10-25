@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+*.log
+*.tsbuildinfo
+.browser-profile/
+.chrome-profile/
+unfold-home.png
+.qa-profile/
+unfold-editor.png
+.DS_Store
