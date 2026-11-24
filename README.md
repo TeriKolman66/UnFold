@@ -2,7 +2,7 @@
 
 Project by Teri Kolman 66 · #TeriKolman66
 
-Version 1.1.0-beta.1 — Unfold Core test build. The replay feature remains beta and unchanged.
+Version 1.1.0-beta.2 — Unfold Core test build. The replay feature remains beta and unchanged.
 
 This beta adds Core prototypes for file/media previews, Python, links, drawing, and reminders. The earlier v1.0.0 installer does not contain them.
 
