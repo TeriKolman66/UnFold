@@ -6,7 +6,7 @@ import { visibleNodes } from './workspace';
 
 export const NODE_WIDTH = 286;
 export const NODE_HEIGHT = 132;
-export const nodeHeight = (node: ThoughtNode) => node.kind === 'location' ? (node.answer ? 380 : 318) : node.kind === 'image' ? 318 : node.kind === 'note' || node.kind === 'file' ? 154 : NODE_HEIGHT;
+export const nodeHeight = (node: ThoughtNode) => node.kind === 'location' ? (node.answer ? 380 : 318) : node.kind === 'image' || node.kind === 'drawing' || node.kind === 'link' ? 365 : node.kind === 'file' ? (node.attachment?.mimeType.startsWith('audio/') ? 245 : 365) : node.kind === 'note' ? 154 : NODE_HEIGHT;
 
 export function layoutThoughtTree(nodes: ThoughtNode[], onToggle: (id: string) => void): { nodes: ThoughtFlowNode[]; edges: Edge[] } {
   const shown = visibleNodes(nodes);

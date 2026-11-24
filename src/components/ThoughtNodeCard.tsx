@@ -1,8 +1,10 @@
 import { memo, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, File, Image as ImageIcon, ListTodo, MapPin, Maximize2, StickyNote, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, File, Image as ImageIcon, Link2, ListTodo, MapPin, Maximize2, Pencil, StickyNote, Trash2 } from 'lucide-react';
 import type { ThoughtNode } from '../types';
 import { embeddedMapUrl, googleMapsUrl } from '../lib/location';
+import { AttachmentPreview } from './AttachmentPreview';
+import { LinkPreview } from './LinkPreview';
 
 export type ThoughtFlowNode = Node<{ thought: ThoughtNode; childCount: number; onToggle: (id: string) => void; onFindMap?: (id: string) => void; onOpenMap?: (id: string) => void; onDeletePhoto?: (id: string, index: number) => void; findingMap?: boolean }, 'thought'>;
 
@@ -30,7 +32,7 @@ export const ThoughtNodeCard = memo(({ data, selected }: NodeProps<ThoughtFlowNo
   const colorStyle = thought.color ? { '--clue-color': thought.color } as CSSProperties : undefined;
   return <div style={colorStyle} className={`thought-node ${thought.kind} ${thought.color ? 'has-color' : ''} ${thought.completed ? 'completed' : ''} ${selected ? 'selected' : ''}`}>
     {thought.kind !== 'root' && <Handle type="target" position={Position.Left} />}
-    <div className="node-kicker">{thought.kind === 'task' && <ListTodo size={11} />}{thought.kind === 'note' && <StickyNote size={11} />}{thought.kind === 'image' && <ImageIcon size={11} />}{thought.kind === 'file' && <File size={11} />}{thought.kind === 'location' && <MapPin size={11} />}{thought.kind === 'location' ? 'LOCATION' : 'CLUE'}</div>
+    <div className="node-kicker">{thought.kind === 'task' && <ListTodo size={11} />}{thought.kind === 'note' && <StickyNote size={11} />}{thought.kind === 'image' && <ImageIcon size={11} />}{thought.kind === 'file' && <File size={11} />}{thought.kind === 'location' && <MapPin size={11} />}{thought.kind === 'link' && <Link2 size={11} />}{thought.kind === 'drawing' && <Pencil size={11} />}{thought.kind === 'location' ? 'LOCATION' : thought.kind === 'link' ? 'LINK' : thought.kind === 'drawing' ? 'DRAWING' : 'CLUE'}{thought.reminderAt && !thought.remindedAt && <span className="node-reminder-mark" title={`Reminder: ${new Date(thought.reminderAt).toLocaleString()}`}>●</span>}</div>
     <div className="node-title" title={thought.question}>{thought.question || 'Untitled question'}</div>
     {thought.kind === 'image' && thought.attachment && <img className="node-image" src={thought.attachment.dataUrl} alt={thought.attachment.name} />}
     {thought.kind === 'location' && thought.location && <div className="location-card-content">
@@ -43,7 +45,8 @@ export const ThoughtNodeCard = memo(({ data, selected }: NodeProps<ThoughtFlowNo
       </div>
       <div className="location-card-footer"><a className="nodrag" href={googleMapsUrl(thought.location)} target="_blank" rel="noreferrer" title="Open location in Google Maps" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>Open in Maps <ExternalLink size={13} /></a></div>
     </div>}
-    {thought.kind === 'file' && thought.attachment && <div className="node-file"><File size={16} /><span>{thought.attachment.name}</span></div>}
+    {(thought.kind === 'file' || thought.kind === 'drawing') && thought.attachment && <div className="node-attachment"><AttachmentPreview attachment={thought.attachment} compact /></div>}
+    {thought.kind === 'link' && <LinkPreview url={thought.linkUrl ?? ''} compact />}
     {thought.answer && <p className="node-note">{thought.answer}</p>}
     {(thought.kind === 'question' || thought.kind === 'task') && <div className="node-meta">
       <span>{thought.answer.trim() ? 'Answered' : 'Unanswered'}</span>

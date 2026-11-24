@@ -1,6 +1,6 @@
 import type { Viewport } from '@xyflow/react';
 
-export type NodeKind = 'root' | 'question' | 'task' | 'note' | 'image' | 'file' | 'location';
+export type NodeKind = 'root' | 'question' | 'task' | 'note' | 'image' | 'file' | 'location' | 'link' | 'drawing';
 
 export interface EmbeddedAttachment {
   name: string;
@@ -34,6 +34,9 @@ export interface ThoughtNode {
   color?: string;
   attachment?: EmbeddedAttachment;
   location?: LocationDetails;
+  linkUrl?: string;
+  reminderAt?: string;
+  remindedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

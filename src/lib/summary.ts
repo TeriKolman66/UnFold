@@ -8,16 +8,19 @@ export function buildSummary(workspace: WorkspaceDocument): string {
   lines.push('## Items', '');
   const render = (node: ThoughtNode, depth: number) => {
     if (node.kind !== 'root') {
-      const label = node.kind === 'task' ? 'Task' : node.kind === 'question' ? 'Question' : node.kind === 'note' ? 'Note' : node.kind === 'image' ? 'Image' : 'File';
+      const label = node.kind === 'task' ? 'Task' : node.kind === 'question' ? 'Question' : node.kind === 'note' ? 'Note' : node.kind === 'image' ? 'Image' : node.kind === 'location' ? 'Location' : node.kind === 'link' ? 'Link' : node.kind === 'drawing' ? 'Drawing' : 'File';
       lines.push(`${'#'.repeat(Math.min(depth + 2, 6))} ${label}: ${node.question}`, '');
       if (node.kind === 'question' || node.kind === 'task') {
         lines.push(`**Status:** ${node.completed ? 'Complete' : 'Open'}`, '');
         lines.push(node.answer.trim() ? `**Answer:** ${node.answer.trim()}` : '**Answer:** _Unanswered_', '');
       } else if (node.kind === 'note') {
         if (node.answer.trim()) lines.push(node.answer.trim(), '');
+      } else if (node.kind === 'link' && node.linkUrl) {
+        lines.push(`**Link:** ${node.linkUrl}`, '');
       } else if (node.attachment) {
         lines.push(`**Attached:** ${node.attachment.name} (${node.attachment.mimeType || 'file'}, ${node.attachment.size} bytes)`, '');
       }
+      if (node.reminderAt) lines.push(`**Reminder:** ${node.reminderAt}`, '');
     }
     for (const child of children.get(node.id) ?? []) render(child, depth + 1);
   };

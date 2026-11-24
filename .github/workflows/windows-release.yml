@@ -39,6 +39,6 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Unfold v__VERSION__
-          releaseBody: 'First public Unfold release for Windows. Download an installer from the release assets when the build completes, or use the source instructions in README.md.'
+          releaseBody: 'Unfold Core beta for testing file previews and editing, media, Python, links, drawing, and reminders. Python is not sandboxed; run only trusted code. Replay remains beta and unchanged.'
           releaseDraft: false
-          prerelease: false
+          prerelease: true

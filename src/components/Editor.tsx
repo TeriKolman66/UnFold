@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ReactFlow, Background, BackgroundVariant, Controls, getViewportForBounds, useNodesState, type Connection, type EdgeMouseHandler, type NodeMouseHandler, type OnNodeDrag, type ReactFlowInstance, type Viewport } from '@xyflow/react';
-import { ArrowLeft, ExternalLink, File as FileIcon, FileUp, ImagePlus, Keyboard, LayoutTemplate, MapPin, Pause, Pin, PinOff, Play, Save, SkipForward, StickyNote, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Bell, Code2, ExternalLink, File as FileIcon, FileUp, Film, ImagePlus, Keyboard, LayoutTemplate, Link2, MapPin, Pause, Pencil, Pin, PinOff, Play, Save, SkipForward, StickyNote, Trash2, X } from 'lucide-react';
 import type { ConnectionKind, EmbeddedAttachment, LocationDetails, NodeKind, ThoughtNode, WorkspaceDocument } from '../types';
 import { connectionKind, validateConnection } from '../lib/connections';
 import { now, uid } from '../lib/workspace';
@@ -9,13 +9,24 @@ import { saveToKnownPath, saveWorkspaceAs } from '../lib/storage';
 import { embeddedMapUrl, findPlaceCoordinates, googleMapsUrl, parseCoordinates, parseLocationInput } from '../lib/location';
 import { embedPlacePhoto, searchPlacePhotos, type PlacePhoto } from '../lib/placePhotos';
 import { buildChronology } from '../lib/chronology';
+import { attachmentText, isEditableText, isPython, newPythonAttachment, safeLink, withAttachmentText } from '../lib/attachments';
+import { runPython, type PythonResult } from '../lib/pythonRunner';
+import { nextDueReminder } from '../lib/reminders';
 import { Modal } from './Modal';
+import { AttachmentPreview } from './AttachmentPreview';
+import { DrawingEditor } from './DrawingEditor';
+import { LinkPreview } from './LinkPreview';
 import { ThoughtNodeCard, type ThoughtFlowNode } from './ThoughtNodeCard';
 import { ConnectionEdge, type ConnectionFlowEdge } from './ConnectionEdge';
 
 const nodeTypes = { thought: ThoughtNodeCard };
 const edgeTypes = { connection: ConnectionEdge };
 const shortPhotoName = (name: string) => name.length > 34 ? `${name.slice(0, 31)}…` : name;
+const localInputTime = (iso?: string) => {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return '';
+  const date = new Date(iso);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
 const clueColors = ['#7f8c8d', '#d65a5a', '#d88b3d', '#c7ad4f', '#5d9b68', '#4f8fc7', '#7667c7', '#a65da1'];
 const placementSlots: Array<readonly [number, number]> = [[0, 0]];
 for (let radius = 1; radius <= 12; radius += 1) {
@@ -66,6 +77,13 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
   const [photoSearchState, setPhotoSearchState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [importingPhotoUrl, setImportingPhotoUrl] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkDraft, setLinkDraft] = useState('');
+  const [pythonRunning, setPythonRunning] = useState(false);
+  const [pythonOutput, setPythonOutput] = useState<{ id: string; result?: PythonResult; error?: string } | null>(null);
+  const [pendingPython, setPendingPython] = useState<ThoughtNode | null>(null);
+  const [reminderNotice, setReminderNotice] = useState<ThoughtNode | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const firstRender = useRef(true);
   const replayWasActive = useRef(playChronology);
   const previousNodeCount = useRef(initial.nodes.length);
@@ -141,6 +159,18 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
     });
   }, []);
 
+  useEffect(() => {
+    const check = () => {
+      const due = nextDueReminder(workspace.nodes);
+      if (!due) return;
+      setReminderNotice(due);
+      updateNode(due.id, { remindedAt: now() });
+    };
+    check();
+    const timer = window.setInterval(check, 15_000);
+    return () => window.clearInterval(timer);
+  }, [updateNode, workspace.nodes]);
+
   const addItem = useCallback((question = '', kind: Exclude<NodeKind, 'root'> = 'note', attachment?: EmbeddedAttachment, placementOffset = 0, location?: LocationDetails) => {
     const timestamp = now();
     const fallback = kind === 'note' ? 'New note' : kind === 'image' ? 'Image' : kind === 'file' ? 'File' : 'Item';
@@ -150,11 +180,11 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
     const center = instance?.screenToFlowPosition(screenCenter) ?? { x: 263, y: 186 };
     const occupied = flow.nodes.map((item) => ({ x: item.position.x, y: item.position.y, width: 286, height: nodeHeight(item.data.thought) }));
     const orderedSlots = [...placementSlots.slice(placementOffset), ...placementSlots.slice(0, placementOffset)];
-    const itemHeight = kind === 'image' || kind === 'location' ? 318 : 154;
+    const itemHeight = kind === 'image' || kind === 'location' || kind === 'file' || kind === 'link' || kind === 'drawing' ? 365 : 154;
     let position = { x: center.x - 143, y: center.y - itemHeight / 2 };
     for (const [column, row] of orderedSlots) {
-      const candidate = { x: center.x - 143 + column * 326, y: center.y - 77 + row * 230 };
-      const overlaps = occupied.some((item) => candidate.x < item.x + item.width + 24 && candidate.x + 286 + 24 > item.x && candidate.y < item.y + item.height + 24 && candidate.y + 154 + 24 > item.y);
+      const candidate = { x: center.x - 143 + column * 326, y: center.y - itemHeight / 2 + row * 410 };
+      const overlaps = occupied.some((item) => candidate.x < item.x + item.width + 24 && candidate.x + 286 + 24 > item.x && candidate.y < item.y + item.height + 24 && candidate.y + itemHeight + 24 > item.y);
       if (!overlaps) { position = candidate; break; }
     }
     const node: ThoughtNode = { id: uid(), parentId: null, kind, question: question || fallback, answer: '', attachment, location, completed: false, collapsed: false, position, createdAt: timestamp, updatedAt: timestamp };
@@ -167,6 +197,32 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
   const addNote = useCallback(() => {
     addItem('New note', 'note');
   }, [addItem]);
+
+  const addPython = () => {
+    const id = addItem('script.py', 'file', newPythonAttachment());
+    setEditingId(id); setPanelOpen(true);
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-file-editor]')?.focus(), 0);
+  };
+  const addDrawing = () => {
+    const id = addItem('New drawing', 'drawing');
+    setEditingId(id); setPanelOpen(true);
+  };
+  const addLink = () => {
+    const url = safeLink(linkDraft);
+    if (!url) { setToast('Enter an http or https link'); return; }
+    const id = addItem(new URL(url).hostname, 'link');
+    updateNode(id, { linkUrl: url });
+    setLinkDraft(''); setLinkOpen(false);
+  };
+
+  const executePython = async (node: ThoughtNode) => {
+    if (!node.attachment || !isPython(node.attachment) || pythonRunning) return;
+    setPythonRunning(true);
+    setPythonOutput({ id: node.id });
+    try { setPythonOutput({ id: node.id, result: await runPython(attachmentText(node.attachment)) }); }
+    catch (error) { setPythonOutput({ id: node.id, error: error instanceof Error ? error.message : 'Could not run Python' }); }
+    finally { setPythonRunning(false); }
+  };
 
   const createLocation = () => {
     const name = locationName.trim();
@@ -233,15 +289,16 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
     finally { setImportingPhotoUrl(null); }
   };
 
-  const addAttachments = useCallback((kind: 'image' | 'file') => {
+  const addAttachments = useCallback((kind: 'image' | 'file' | 'media') => {
     const input = document.createElement('input');
-    input.type = 'file'; input.multiple = true; input.accept = kind === 'image' ? 'image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.avif,.tif,.tiff' : '*/*';
+    input.type = 'file'; input.multiple = true; input.accept = kind === 'image' ? 'image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.avif,.tif,.tiff' : kind === 'media' ? 'video/*,audio/*,image/gif,.mp4,.webm,.mov,.mp3,.wav,.ogg,.gif' : '*/*';
     input.onchange = async () => {
       const files = [...(input.files ?? [])];
       if (!files.length) return;
+      if (files.some((file) => file.size > 50 * 1024 * 1024)) { setToast('Files over 50 MB cannot be embedded yet'); return; }
       for (const [index, file] of files.entries()) {
         const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
-        addItem(file.name, kind, { name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, dataUrl }, index);
+        addItem(file.name, kind === 'media' ? 'file' : kind, { name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, dataUrl }, index);
       }
       setToast(files.length === 1 ? `${files[0].name} added` : `${files.length} files added`);
     };
@@ -371,7 +428,7 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
       }
       else if (event.key === 'Delete' && selectedConnectionId) disconnect(selectedConnectionId);
       else if (event.key === 'Delete' && selected) setConfirmDelete(selected);
-      else if (event.key === 'Escape') { setSelectedId(null); setSelectedConnectionId(null); setLinkSourceId(null); setPanelOpen(false); setMapOpenId(null); setLocationOpen(false); setShortcutsOpen(false); }
+      else if (event.key === 'Escape') { setSelectedId(null); setSelectedConnectionId(null); setLinkSourceId(null); setPanelOpen(false); setMapOpenId(null); setLocationOpen(false); setLinkOpen(false); setPendingPython(null); setReminderNotice(null); setExpandedId(null); setShortcutsOpen(false); }
       else if (event.key.toLowerCase() === 'f') fitAll();
     };
     window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown);
@@ -419,7 +476,7 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
       </div>
     </header>
     <div className="canvas-wrap">
-      <ReactFlow<ThoughtFlowNode, ConnectionFlowEdge> nodes={renderNodes} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onInit={setInstance} onNodeDragStop={onNodeDragStop} onConnect={onConnect} onNodeClick={playbackActive ? undefined : onNodeClick} onEdgeClick={playbackActive ? undefined : onEdgeClick} onPaneClick={() => { setSelectedId(null); setSelectedConnectionId(null); }} minZoom={0.18} maxZoom={1.8} defaultViewport={workspace.viewport} fitViewOptions={{ padding: 0.18 }} nodesDraggable={!playbackActive} nodesConnectable={!playbackActive} proOptions={{ hideAttribution: true }} onMoveEnd={(_event: MouseEvent | TouchEvent | null, viewport: Viewport) => { if (!playbackActive) setWorkspace((current) => ({ ...current, viewport })); }}>
+      <ReactFlow<ThoughtFlowNode, ConnectionFlowEdge> nodes={renderNodes} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onInit={setInstance} onNodeDragStop={onNodeDragStop} onConnect={onConnect} onNodeClick={playbackActive ? undefined : onNodeClick} onEdgeClick={playbackActive ? undefined : onEdgeClick} onPaneClick={() => { setSelectedId(null); setSelectedConnectionId(null); }} minZoom={0.18} maxZoom={1.8} defaultViewport={workspace.viewport} fitViewOptions={{ padding: 0.18 }} onlyRenderVisibleElements nodesDraggable={!playbackActive} nodesConnectable={!playbackActive} proOptions={{ hideAttribution: true }} onMoveEnd={(_event: MouseEvent | TouchEvent | null, viewport: Viewport) => { if (!playbackActive) setWorkspace((current) => ({ ...current, viewport })); }}>
         <Background color="#1b1b1b" gap={28} size={1} variant={BackgroundVariant.Dots} />
         <Controls showInteractive={false} showFitView={false} position="bottom-left" />
       </ReactFlow>
@@ -431,11 +488,15 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
         <button onClick={addNote} title="Add note"><StickyNote size={16} /> Note</button>
         <button onClick={() => addAttachments('image')} title="Add photos"><ImagePlus size={16} /> Photo</button>
         <button onClick={() => addAttachments('file')} title="Attach files"><FileUp size={16} /> File</button>
+        <button onClick={() => addAttachments('media')} title="Add video, audio, or GIF"><Film size={16} /> Media</button>
+        <button onClick={addPython} title="Create Python file"><Code2 size={16} /> Python</button>
+        <button onClick={() => setLinkOpen(true)} title="Add link"><Link2 size={16} /> Link</button>
+        <button onClick={addDrawing} title="Add drawing"><Pencil size={16} /> Draw</button>
         <button onClick={() => setLocationOpen(true)} title="Add location"><MapPin size={16} /> Location</button>
       </div>}
       {!playbackActive && panelVisible && <aside className="node-panel">
         <div className="panel-head">
-          <span>{editing ? `Clue · ${editing.kind === 'image' ? 'Photo' : editing.kind === 'file' ? 'File' : editing.kind === 'location' ? 'Location' : 'Note'}` : 'Clue editor'}</span>
+          <span>{editing ? `Clue · ${editing.kind === 'image' ? 'Photo' : editing.kind === 'file' ? 'File' : editing.kind === 'location' ? 'Location' : editing.kind === 'link' ? 'Link' : editing.kind === 'drawing' ? 'Drawing' : 'Note'}` : 'Clue editor'}</span>
           <div className="panel-head-actions">
             <button className={`icon-button ${panelPinned ? 'active' : ''}`} onClick={togglePanelPin} title={panelPinned ? 'Unpin panel' : 'Pin panel'} aria-label={panelPinned ? 'Unpin panel' : 'Pin panel'}>{panelPinned ? <PinOff size={16} /> : <Pin size={16} />}</button>
             <button className="icon-button" onClick={() => { setPanelPinned(false); setPanelOpen(false); }} title="Close editor" aria-label="Close editor"><X size={17} /></button>
@@ -448,6 +509,7 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
             {clueColors.map((color) => <button key={color} className={editing.color === color ? 'selected' : ''} style={{ '--swatch': color } as CSSProperties} onClick={() => applyColor(editing.id, color)} title={`Use ${color}`} aria-label={`Use color ${color}`}><i /></button>)}
           </div><small>Select another clue and press C to reuse the last color.</small></div>
           <label>Note<textarea data-clue-note value={editing.answer} onChange={(e) => updateNode(editing.id, { answer: e.target.value })} placeholder="Add a note to this clue…" rows={8} /></label>
+          <div className="reminder-editor"><label><Bell size={14} /> Remind me<input type="datetime-local" value={localInputTime(editing.reminderAt)} onChange={(event) => updateNode(editing.id, { reminderAt: event.target.value ? new Date(event.target.value).toISOString() : undefined, remindedAt: undefined })} /></label>{editing.reminderAt && <button onClick={() => updateNode(editing.id, { reminderAt: undefined, remindedAt: undefined })}>Clear</button>}<small>Reminders appear while Unfold is open.</small></div>
           {editing.kind === 'location' && <div className="location-editor">
             <label>Address or coordinates<input value={editing.location?.query ?? ''} onChange={(e) => updateLocation(editing, { query: e.target.value, latitude: parseCoordinates(e.target.value)?.latitude, longitude: parseCoordinates(e.target.value)?.longitude })} placeholder="Place name, address, or 48.8584, 2.2945" /></label>
             <div className="location-coordinate-row"><label>Latitude<input type="number" step="any" value={editing.location?.latitude ?? ''} onChange={(e) => updateLocation(editing, { latitude: e.target.value === '' ? undefined : Number(e.target.value) })} /></label><label>Longitude<input type="number" step="any" value={editing.location?.longitude ?? ''} onChange={(e) => updateLocation(editing, { longitude: e.target.value === '' ? undefined : Number(e.target.value) })} /></label></div>
@@ -455,7 +517,10 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
             {!!editing.location?.photos?.length && <div className="location-photo-list">{editing.location.photos.map((photo, index) => <div key={`${photo.name}-${index}`}><img src={photo.dataUrl} alt={photo.name} /><span title={photo.name}>{shortPhotoName(photo.name)}</span><button title="Delete photo" aria-label={`Delete ${photo.name}`} onClick={() => setConfirmPhotoDelete({ nodeId: editing.id, index, name: photo.name })}><Trash2 size={14} /></button></div>)}</div>}
           </div>}
           {editing.kind === 'image' && editing.attachment && <div className="attachment-preview"><img src={editing.attachment.dataUrl} alt={editing.attachment.name} /><small>{editing.attachment.mimeType} · {(editing.attachment.size / 1024 / 1024).toFixed(2)} MB</small></div>}
-          {editing.kind === 'file' && editing.attachment && <div className="attachment-file"><FileIcon size={22} /><div><strong>{editing.attachment.name}</strong><small>{editing.attachment.mimeType} · {(editing.attachment.size / 1024).toFixed(1)} KB</small></div><a href={editing.attachment.dataUrl} download={editing.attachment.name}>Download</a></div>}
+          {editing.kind === 'file' && editing.attachment && <div className="file-editor"><div className="attachment-file"><FileIcon size={22} /><div><strong>{editing.attachment.name}</strong><small>{editing.attachment.mimeType} · {(editing.attachment.size / 1024).toFixed(1)} KB</small></div><a href={editing.attachment.dataUrl} download={editing.attachment.name}>Download</a></div>{isEditableText(editing.attachment) && editing.attachment.size <= 524_288 ? <label>File content<textarea data-file-editor spellCheck={false} value={attachmentText(editing.attachment)} onChange={(event) => updateNode(editing.id, { attachment: withAttachmentText(editing.attachment!, event.target.value) })} rows={12} /></label> : <AttachmentPreview attachment={editing.attachment} />}{isPython(editing.attachment) && <><button className="button button-quiet compact" disabled={pythonRunning} onClick={() => setPendingPython(editing)}><Play size={14} /> {pythonRunning ? 'Running…' : 'Run Python'}</button><small className="python-warning">Python runs in a separate process with a 5-second time limit, but it is not a security sandbox. Run only code you trust.</small>{pythonOutput?.id === editing.id && <pre className="python-output">{pythonOutput.error ?? `${pythonOutput.result?.stdout ?? ''}${pythonOutput.result?.stderr ? `\n${pythonOutput.result.stderr}` : ''}${pythonOutput.result?.timedOut ? '\nStopped after 5 seconds.' : ''}`}</pre>}</>}</div>}
+          {editing.kind === 'link' && <div className="link-editor"><label>Web address<input value={editing.linkUrl ?? ''} onChange={(event) => updateNode(editing.id, { linkUrl: event.target.value })} placeholder="https://example.com" /></label><LinkPreview url={editing.linkUrl ?? ''} /></div>}
+          {editing.kind === 'drawing' && <DrawingEditor attachment={editing.attachment} onChange={(attachment) => updateNode(editing.id, { attachment })} />}
+          {(editing.kind === 'file' || editing.kind === 'drawing' || editing.kind === 'link') && <button className="button button-quiet compact expand-clue" onClick={() => setExpandedId(editing.id)}>Open large view</button>}
           <button className="delete-action" onClick={() => setConfirmDelete(editing)}><Trash2 size={15} /> Delete item</button>
         </div> : <div className="panel-empty"><StickyNote size={24} /><span>No clue is open</span><small>Select a clue and press Enter to edit it.</small></div>}
       </aside>}
@@ -477,6 +542,10 @@ export function Editor({ initial, filePath: initialPath, onExit, onOpenFile, onN
       <p>Shortcuts do not interrupt typing in text fields.</p>
     </div></Modal>}
     {locationOpen && <Modal title="Add location" onClose={() => setLocationOpen(false)}><div className="form-stack"><label>Place name or address<input autoFocus value={locationName} onChange={(e) => setLocationName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') createLocation(); }} placeholder="e.g. New York, USA" /></label><small className="location-help">Enter a place name or address. UnFold finds it and shows a live map in the card. Looking up a new place needs internet; the workspace stays local.</small><div className="modal-actions"><button className="button button-quiet" onClick={() => setLocationOpen(false)}>Cancel</button><button className="button button-primary" disabled={!locationName.trim()} onClick={createLocation}>Add location</button></div></div></Modal>}
+    {linkOpen && <Modal title="Add link" onClose={() => setLinkOpen(false)}><div className="form-stack"><label>Web address<input autoFocus value={linkDraft} onChange={(event) => setLinkDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addLink(); }} placeholder="https://example.com" /></label><small className="location-help">Unfold tries to show the page inside the clue. Some sites block embedding; the Open link button always works.</small><div className="modal-actions"><button className="button button-quiet" onClick={() => setLinkOpen(false)}>Cancel</button><button className="button button-primary" disabled={!safeLink(linkDraft)} onClick={addLink}>Add link</button></div></div></Modal>}
+    {pendingPython && <Modal title="Run Python file?" onClose={() => setPendingPython(null)}><p className="modal-intro">Only run code you trust. Python is launched separately and stopped after 5 seconds, but it is <strong>not sandboxed</strong> and can read or change files on this computer.</p><div className="modal-actions"><button className="button button-quiet" onClick={() => setPendingPython(null)}>Cancel</button><button className="button button-danger" onClick={() => { const node = pendingPython; setPendingPython(null); void executePython(node); }}>Run this file</button></div></Modal>}
+    {expandedId && (() => { const node = workspace.nodes.find((item) => item.id === expandedId); if (!node) return null; return <Modal title={node.question} onClose={() => setExpandedId(null)} wide><div className="expanded-clue">{node.kind === 'file' && node.attachment && <>{isEditableText(node.attachment) && node.attachment.size <= 524_288 ? <textarea spellCheck={false} aria-label="Expanded file editor" value={attachmentText(node.attachment)} onChange={(event) => updateNode(node.id, { attachment: withAttachmentText(node.attachment!, event.target.value) })} /> : <AttachmentPreview attachment={node.attachment} />}{isPython(node.attachment) && <button className="button button-quiet compact" disabled={pythonRunning} onClick={() => { setExpandedId(null); setPendingPython(node); }}><Play size={14} /> Run Python</button>}{pythonOutput?.id === node.id && <pre className="python-output">{pythonOutput.error ?? `${pythonOutput.result?.stdout ?? ''}${pythonOutput.result?.stderr ? `\n${pythonOutput.result.stderr}` : ''}${pythonOutput.result?.timedOut ? '\nStopped after 5 seconds.' : ''}`}</pre>}</>}{node.kind === 'drawing' && <DrawingEditor attachment={node.attachment} onChange={(attachment) => updateNode(node.id, { attachment })} />}{node.kind === 'link' && <LinkPreview url={node.linkUrl ?? ''} />}</div></Modal>; })()}
+    {reminderNotice && <Modal title="Clue reminder" onClose={() => setReminderNotice(null)}><p className="modal-intro">{reminderNotice.question}</p><div className="modal-actions"><button className="button button-primary" onClick={() => { setSelectedId(reminderNotice.id); setEditingId(reminderNotice.id); setPanelOpen(true); setReminderNotice(null); }}>Open clue</button><button className="button button-quiet" onClick={() => setReminderNotice(null)}>Dismiss</button></div></Modal>}
     {mapOpenId && (() => { const node = workspace.nodes.find((item) => item.id === mapOpenId); if (!node?.location) return null; const mapUrl = embeddedMapUrl(node.location); return <Modal title={node.question} onClose={() => setMapOpenId(null)} wide><div className="location-map-modal">{mapUrl ? <iframe title={`Map of ${node.question}`} src={mapUrl} loading="lazy" referrerPolicy="no-referrer" /> : <div className="location-map-fallback"><MapPin size={27} /><span>Coordinates are not available for this location.</span><small>You can add them in the editor, or open the original link.</small></div>}<a href={googleMapsUrl(node.location)} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open in Google Maps</a><small>Interactive map by {node.location.embedUrl ? 'Google Maps' : 'OpenStreetMap'} · requires internet</small></div></Modal>; })()}
     {photoSearchNodeId && (() => { const node = workspace.nodes.find((item) => item.id === photoSearchNodeId); if (!node?.location) return null; return <Modal title={`Photos near ${node.question}`} onClose={() => setPhotoSearchNodeId(null)} wide><div className="place-photo-search"><p>Wikimedia Commons photos near this point. Check each image before adding it—nearby does not always mean the exact place.</p>{photoSearchState === 'loading' && <div className="place-photo-message">Searching photos…</div>}{photoSearchState === 'error' && <div className="place-photo-message">Photo search is unavailable. You can still add your own photos.</div>}{photoSearchState === 'ready' && photoResults.length === 0 && <div className="place-photo-message">No nearby photos found. Try adding your own.</div>}{photoSearchState === 'ready' && <div className="place-photo-grid">{photoResults.map((photo) => { const added = node.location!.photos.some((item) => item.sourceUrl === photo.sourceUrl); return <div className="place-photo-result" key={photo.sourceUrl}><img src={photo.thumbnailUrl} alt={photo.title} loading="lazy" /><strong title={photo.title}>{shortPhotoName(photo.title)}</strong><small title={`${photo.attribution} · ${photo.license}`}>{photo.attribution} · {photo.license}</small><div><a href={photo.sourceUrl} target="_blank" rel="noreferrer">Source <ExternalLink size={12} /></a><button disabled={added || importingPhotoUrl !== null} onClick={() => void addFoundPhoto(node.id, photo)}>{added ? 'Added' : importingPhotoUrl === photo.sourceUrl ? 'Adding…' : 'Add photo'}</button></div></div>; })}</div>}</div></Modal>; })()}
     {confirmPhotoDelete && <Modal title="Delete this photo?" onClose={() => setConfirmPhotoDelete(null)}><p className="modal-intro">“{shortPhotoName(confirmPhotoDelete.name)}” will be removed from this location. This cannot be undone after autosave.</p><div className="modal-actions"><button className="button button-quiet" onClick={() => setConfirmPhotoDelete(null)}>Cancel</button><button className="button button-danger" onClick={deleteLocationPhoto}>Delete photo</button></div></Modal>}

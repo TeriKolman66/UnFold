@@ -2,7 +2,9 @@
 
 Project by Teri Kolman 66 · #TeriKolman66
 
-Version 1.0.0 — first public source release. This is an early local-first version; the replay feature is still beta.
+Version 1.1.0-beta.1 — Unfold Core test build. The replay feature remains beta and unchanged.
+
+This beta adds Core prototypes for file/media previews, Python, links, drawing, and reminders. The earlier v1.0.0 installer does not contain them.
 
 Unfold is a private, local-first canvas for arranging **clues**: notes, photos, and files. Every clue can be titled, annotated, moved freely, and connected to another clue.
 
@@ -13,6 +15,12 @@ Unfold is a private, local-first canvas for arranging **clues**: notes, photos, 
 - Note clues with a title and freeform text
 - Photo clues that display the uploaded image directly on the canvas
 - File clues for any file type, embedded inside the portable workspace
+- In-clue previews for text/source files, images, PDFs, audio, and video; text and Python files can be edited in the right panel
+- Create a Python file inside a clue or import an existing `.py` file. Run it only by explicit confirmation, with a 5-second limit and capped output. Python 3 must be installed on the computer. **This is not a security sandbox:** Python code can access local files, so only run code you trust
+- Video, audio, and GIF clues through the Media button (up to 50 MB per embedded file)
+- Link clues with embedded previews where the destination permits framing, plus direct previews for linked images, video, and audio. Sites that block embedding can still be opened through the link
+- Drawing clues with a quick canvas, stored inside the `.unfold` file
+- Per-clue reminders that appear while Unfold is open; background/system notifications and widgets are not implemented yet
 - Location clues with a place name, address or coordinates, a saved Google Maps link, and optional embedded photos
 - Location cards show a real OpenStreetMap preview. Entering a place name or address performs one online lookup to find its coordinates; a Google Maps link with embedded coordinates or manual coordinates works without lookup
 - Old locations with a short Google Maps link and no coordinates show **Find map** on the card; it searches using the card title and replaces the placeholder in place. The original short link is kept under a single **Open in Maps** link

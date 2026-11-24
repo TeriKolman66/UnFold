@@ -3,6 +3,7 @@ dist/
 src-tauri/target/
 *.log
 *.tsbuildinfo
+*.unfold
 .browser-profile/
 .chrome-profile/
 unfold-home.png
